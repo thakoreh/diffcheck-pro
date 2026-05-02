@@ -22,6 +22,13 @@ export default function DiffTool() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showLineNumbers, _setShowLineNumbers] = useState(true)
   const [shareCopied, setShareCopied] = useState(false)
+  const [isExplaining, setIsExplaining] = useState(false)
+  const [aiExplanation, setAiExplanation] = useState<{
+    summary: string;
+    categories: string[];
+    risks: string[];
+    suggestions: string[];
+  } | null>(null)
   const fileInputOriginal = useRef<HTMLInputElement>(null)
   const fileInputModified = useRef<HTMLInputElement>(null)
 
@@ -128,6 +135,25 @@ export default function DiffTool() {
     }
   }
 
+  const explainWithAI = async () => {
+    if (!original && !modified) return
+    setIsExplaining(true)
+    setAiExplanation(null)
+    try {
+      const res = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oldText: original, newText: modified }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAiExplanation(data)
+      }
+    } finally {
+      setIsExplaining(false)
+    }
+  }
+
   const stats = sideBySideResult?.stats || unifiedResult?.stats
 
   const renderWordDiff = (text: string, wordChanges: { value: string; added?: boolean; removed?: boolean }[], isLeft: boolean) => {
@@ -209,6 +235,13 @@ export default function DiffTool() {
             </button>
             <button onClick={shareDiff} className="btn-secondary text-xs px-4 py-2">
               {shareCopied ? '✅ Copied!' : '🔗 Share Link'}
+            </button>
+            <button
+              onClick={explainWithAI}
+              disabled={isExplaining}
+              className="btn-secondary text-xs px-4 py-2 disabled:opacity-50"
+            >
+              {isExplaining ? '⏳ Analyzing...' : '🤖 Explain with AI'}
             </button>
           </>
         )}
@@ -319,6 +352,50 @@ export default function DiffTool() {
           <span className="ml-auto text-xs text-gray-500 dark:text-gray-400">
             {stats.additions + stats.deletions + stats.unchanged} total lines
           </span>
+        </div>
+      )}
+
+      {/* AI Explanation Panel */}
+      {aiExplanation && (
+        <div className="card p-5 space-y-4 border-l-4 border-indigo-500">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🤖</span>
+            <h3 className="font-bold text-gray-900 dark:text-white">AI Analysis</h3>
+          </div>
+          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+            {aiExplanation.summary}
+          </p>
+          {aiExplanation.categories.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {aiExplanation.categories.map(cat => (
+                <span key={cat} className="px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full dark:bg-indigo-900/30 dark:text-indigo-300">
+                  {cat}
+                </span>
+              ))}
+            </div>
+          )}
+          {aiExplanation.risks.length > 0 && (
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-semibold text-red-600 dark:text-red-400 uppercase tracking-wide">⚠️ Risks</h4>
+              {aiExplanation.risks.map((risk, i) => (
+                <p key={i} className="text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+                  <span className="mt-0.5">•</span>
+                  <span>{risk}</span>
+                </p>
+              ))}
+            </div>
+          )}
+          {aiExplanation.suggestions.length > 0 && (
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-semibold text-brand-600 dark:text-brand-400 uppercase tracking-wide">💡 Suggestions</h4>
+              {aiExplanation.suggestions.map((sug, i) => (
+                <p key={i} className="text-xs text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                  <span className="mt-0.5">•</span>
+                  <span>{sug}</span>
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
