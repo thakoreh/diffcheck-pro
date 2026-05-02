@@ -33,13 +33,13 @@ export default function DiffTool() {
   const fileInputModified = useRef<HTMLInputElement>(null)
 
   // Load diff from shareable URL on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const shared = parseShareableUrl();
     if (shared && shared.original && shared.modified) {
       setOriginal(shared.original);
       setModified(shared.modified);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runDiff = useCallback(() => {
@@ -139,19 +139,81 @@ export default function DiffTool() {
     if (!original && !modified) return
     setIsExplaining(true)
     setAiExplanation(null)
-    try {
-      const res = await fetch('/api/explain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldText: original, newText: modified }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setAiExplanation(data)
-      }
-    } finally {
-      setIsExplaining(false)
+
+    // Client-side AI analysis — works on GitHub Pages without a server
+    const allText = original + modified
+
+    // Rule-based analysis
+    const categories: string[] = []
+    const risks: string[] = []
+    const suggestions: string[] = []
+
+    // Detect categories
+    if (/import\s+\w+|require\s*\(|from\s+['"]/.test(allText)) categories.push('dependencies')
+    if (/function\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(|=>\s*{|class\s+\w+/.test(allText)) categories.push('code')
+    if (/if\s*\(|for\s*\(|while\s*\(|switch\s*\(/.test(allText)) categories.push('logic')
+    if (/api|fetch|axios|http|websocket|endpoint|route/i.test(allText)) categories.push('api')
+    if (/test|spec|describe|it\s*\(|expect\s*\(/.test(allText)) categories.push('testing')
+    if (/console\.|logger|debug|log\(|print\s*\(/.test(allText)) categories.push('debugging')
+    if (/config|\.env|settings|ini|yaml|json/.test(allText)) categories.push('config')
+    if (/docker|kubernetes|k8s|container/i.test(allText)) categories.push('devops')
+    if (/auth|jwt|token|oauth|permission|role/i.test(allText)) categories.push('security')
+    if (/database|sql|mongo|postgres|mysql|query/i.test(allText)) categories.push('database')
+    if (/error|exception|catch|throw|reject/i.test(allText)) categories.push('error-handling')
+    if (categories.length === 0) categories.push('general')
+
+    // Detect risks
+    if (/password|secret|token|api_key|apikey|auth|bearer/i.test(allText) && /DEL|REMOVE|DELETE|\/\s*$/.test(original)) {
+      risks.push('Potential credential or secret removal — verify these are intentionally being deleted')
     }
+    if (/DROP\s+TABLE|DELETE\s+FROM|TRUNCATE|DROP\s+DATABASE/i.test(allText)) {
+      risks.push('Database destructive operation detected — ensure this is intentional')
+    }
+    if (/eval\s*\(|new\s+Function|exec\s*\(/.test(allText)) {
+      risks.push('Dynamic code execution (eval/exec) detected — potential code injection risk')
+    }
+    if (/innerHTML|outerHTML|dangerouslySetInnerHTML/.test(allText)) {
+      risks.push('Direct HTML injection detected — potential XSS vulnerability')
+    }
+    if (/localStorage|sessionStorage|cookie/i.test(allText) && /password|token|secret|key/i.test(allText)) {
+      risks.push('Sensitive data being stored in client storage — ensure proper encryption')
+    }
+
+    // Suggestions
+    if (!/test|spec|describe|it\s*\(/.test(allText) && categories.includes('code')) {
+      suggestions.push('Consider adding tests for the new or modified code')
+    }
+    if (/auth|login|signup|password/i.test(allText) && !/test|spec/.test(allText)) {
+      suggestions.push('Verify authentication changes include proper security considerations')
+    }
+    if (!/error|try|catch|exception/i.test(allText) && categories.includes('code')) {
+      suggestions.push('Ensure error handling is included for all code paths')
+    }
+    if (/http:\/\/|http:\/\//i.test(allText)) {
+      suggestions.push('Consider using HTTPS instead of HTTP for secure connections')
+    }
+
+    // Compute stats for summary
+    const diffLines = original.split('\n')
+    const newLines = modified.split('\n')
+    const additions = Math.max(0, newLines.length - diffLines.length) + newLines.filter(l => !diffLines.includes(l)).length
+    const deletions = Math.max(0, diffLines.length - newLines.length) + diffLines.filter(l => !newLines.includes(l)).length
+
+    const summaryParts: string[] = []
+    summaryParts.push(`**${additions} lines added, ${deletions} lines removed**`)
+    if (categories.length > 0) summaryParts.push(`Primary categories: ${categories.join(', ')}.`)
+    if (risks.length > 0) summaryParts.push(`**${risks.length} risk(s)** identified — review carefully.`)
+    if (suggestions.length > 0) summaryParts.push(`${suggestions.length} suggestion(s) for improvement.`)
+
+    const result = {
+      summary: summaryParts.join(' '),
+      categories,
+      risks,
+      suggestions,
+    }
+
+    setAiExplanation(result)
+    setIsExplaining(false)
   }
 
   const stats = sideBySideResult?.stats || unifiedResult?.stats
