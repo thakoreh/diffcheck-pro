@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { computeSideBySide, computeLineDiff, generateHTMLReport, LANGUAGE_OPTIONS, SAMPLE_ORIGINAL, SAMPLE_MODIFIED, SideBySideLine, DiffResult } from '@/lib/diff'
+import { parseShareableUrl, buildShareableUrl } from '@/lib/compress'
 
 type ViewMode = 'side-by-side' | 'unified'
 type DiffMode = 'line' | 'word'
@@ -20,8 +21,19 @@ export default function DiffTool() {
   const [wrapLines, _setWrapLines] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showLineNumbers, _setShowLineNumbers] = useState(true)
+  const [shareCopied, setShareCopied] = useState(false)
   const fileInputOriginal = useRef<HTMLInputElement>(null)
   const fileInputModified = useRef<HTMLInputElement>(null)
+
+  // Load diff from shareable URL on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const shared = parseShareableUrl();
+    if (shared && shared.original && shared.modified) {
+      setOriginal(shared.original);
+      setModified(shared.modified);
+    }
+  }, []);
 
   const runDiff = useCallback(() => {
     if (!original && !modified) {
@@ -103,6 +115,19 @@ export default function DiffTool() {
     URL.revokeObjectURL(url)
   }
 
+  const shareDiff = async () => {
+    if (!original && !modified) return
+    const url = buildShareableUrl(original, modified)
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareCopied(true)
+      setTimeout(() => setShareCopied(false), 2500)
+    } catch {
+      // Fallback
+      prompt('Copy this link:', url)
+    }
+  }
+
   const stats = sideBySideResult?.stats || unifiedResult?.stats
 
   const renderWordDiff = (text: string, wordChanges: { value: string; added?: boolean; removed?: boolean }[], isLeft: boolean) => {
@@ -178,9 +203,14 @@ export default function DiffTool() {
         </div>
 
         {hasDiff && (
-          <button onClick={exportReport} className="btn-secondary text-xs px-4 py-2">
-            📥 Export Report
-          </button>
+          <>
+            <button onClick={exportReport} className="btn-secondary text-xs px-4 py-2">
+              📥 Export Report
+            </button>
+            <button onClick={shareDiff} className="btn-secondary text-xs px-4 py-2">
+              {shareCopied ? '✅ Copied!' : '🔗 Share Link'}
+            </button>
+          </>
         )}
       </div>
 
