@@ -4,6 +4,9 @@
   "description": "MCP server for AI-powered code diff analysis — AI agents can call this to understand code changes",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "diffpro": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
     "start": "node dist/index.js",

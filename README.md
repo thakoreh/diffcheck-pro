@@ -23,10 +23,17 @@
 
 DiffCheck Pro ships with an **MCP server** that AI coding agents (Claude, Cursor, etc.) can use to analyze code diffs.
 
-### Install
+### Install (npm — one line)
 
 ```bash
-cd mcp-server
+npm install -g diffpro-mcp-server
+```
+
+### Install from source
+
+```bash
+git clone https://github.com/hthakore/diffcheck-pro.git
+cd diffcheck-pro/mcp-server
 npm install
 npm run build
 ```
@@ -34,6 +41,19 @@ npm run build
 ### Use with Claude Desktop
 
 Add to `~/.claude/mcp_servers.json`:
+
+```json
+{
+  "mcpServers": {
+    "diffpro": {
+      "command": "npx",
+      "args": ["diffpro-mcp-server"]
+    }
+  }
+}
+```
+
+Or from source:
 
 ```json
 {
